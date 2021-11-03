@@ -19,7 +19,7 @@
 - tensorboardX
 
 ### Running the training script
-If the DDI pairs data lives in './data/ddi_pairs.txt', then you run something like this:
+If the DDI pairs data lives in `./data/ddi_pairs.txt`, then you might run something like this:
 ```
 python main.py --data_fn './data/ddi_pairs.txt' --hid_dim 256 --epochs 300 --savedir './results/'  --exp_name 'baseline_256h'  --test_epoch 1  --batch_size 1024  --cuda --save
 ```
