@@ -21,11 +21,19 @@ class BaselineModel(nn.Module):
             nn.ReLU(),
             nn.Linear(hid_dim, out_dim),
         )
+        self.reset_params()
 
     def forward(self, xs):
         xs = self.enc(xs)
         xs = xs.sum(dim=1)
         return self.dec(xs)
+
+    def reset_params(model):
+        for p in model.parameters():
+            if len(p.shape) > 1:
+                torch.nn.init.xavier_uniform_(p)
+            else:
+                torch.nn.init.zeros_(p)
 
 if __name__ == '__main__':
     net = BaselineModel(100, 32, 32, 300)

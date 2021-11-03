@@ -1,33 +1,46 @@
 import pdb
-from tqdm import tqdm
+import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 
 class DDIData(Dataset):
-    def __init__(self, fn):
+    def __init__(self, fn, nrows=None):
         self._col_names = ['Drug1', 'Drug2', 'ID']
-        self.df = pd.read_csv(fn, sep='\t')
-        self._rev_map = {} # drug name -> id
+        self._df = pd.read_csv(fn, sep='\t', nrows=nrows)
 
-    def _load_df(self, df):
-        drugs = set()
-        labels = set()
+        drugs, labels = self._load_df_fast(self._df)
+        self.drugs = torch.from_numpy(drugs)
+        self.labels = torch.from_numpy(labels)
 
-        for d1, d2, _id in df.iterrows():
-            drugs.add(d1)
-            drugs.add(d2)
-            labels.add(_id)
+    def _load_df_fast(self, df):
+        '''
+        df: pandas dataframe of the the DDI pairs and interaction
+        Returns: tuple of (np.array, np.array)
+            containing the drug pairs (mapped to int ids), interaction label
+        '''
+        unique_drugs = set(df['Drug1'].unique())
+        unique_drugs.update(df['Drug2'].unique())
+        unique_drugs = sorted(unique_drugs)
+        unique_labels = sorted(df['ID'].unique())
+
+        dmap = {d: idx for idx, d in enumerate(unique_drugs)}
+        lmap = {l: idx for idx, l in enumerate(unique_labels)}
+
+        d1 = df['Drug1'].apply(lambda x: dmap[x]).to_numpy()
+        d2 = df['Drug2'].apply(lambda x: dmap[x]).to_numpy()
+        labels = df['ID'].apply(lambda x: lmap[x]).to_numpy()
+        drugs = np.column_stack((d1, d2))
+        return drugs, labels
 
     def __len__(self):
-        return len(self.df)
+        return len(self.drugs)
 
     def __getitem__(self, idx):
-        d1, d2, _id = self.df.iloc[idx]
-        return d1, d2, _id
+        drugs = self.drugs[idx]
+        label = self.labels[idx]
+        return drugs, label
 
 if __name__ == '__main__':
     fn = './data/ddi_pairs.txt'
     dataset = DDIData(fn)
-    pdb.set_trace()

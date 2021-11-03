@@ -10,6 +10,10 @@ from argparse import Namespace
 def get_logger(fname=None, stdout=True):
     '''
     fname: file location to store the log file
+    Returns: logger object
+
+    Use the logger object anywhere where you might use a print statement. The logger
+    object will print log messages to stdout in addition to writing it to a log file.
     '''
     handlers = []
     if stdout:
@@ -34,8 +38,14 @@ def get_logger(fname=None, stdout=True):
 def setup_experiment_log(args, savedir='./results/', exp_name='test', save=False):
     '''
     savedir: str location to save contents in
+    exp_name: Name of experiment
     save: boolean
     Returns: tuple of str (log file) and SummaryWriter
+        SummaryWriter will write to the location specified by: {savedir}/{exp_name}/summary
+        The returned logfile string will be: {savedir}/{exp_name}/output.log
+        If the existing logfile exists (suppose you want to rerun an experiment with
+        the model reloaded from a save checkpoint to continue training), the output log
+        file will instead be output1.log/output2.log/etc.
     '''
     if not save:
         return None, None
@@ -73,6 +83,14 @@ def check_memory(verbose=True):
     return mem
 
 def save_checkpoint(epoch, model, optimizer, fname):
+    '''
+    epoch: int, epoch number
+    model: nn.Module, the model to save
+    optimizer: torch.optim optimizer object
+    fname: string, location to save the checkpoint file to
+
+    Saves a state dict of the model and optimizer so that it can be reloaded.
+    '''
     state = {
         'epoch': epoch + 1,
         'state_dict': model.state_dict(),
@@ -81,6 +99,16 @@ def save_checkpoint(epoch, model, optimizer, fname):
     torch.save(state, fname)
 
 def load_checkpoint(model, optimizer, log, fname):
+    '''
+    model: nn.Module, the model to reload
+    optimizer: torch.optim optimizer, the optizer to reload
+    log: logger object
+    fname: string, file name to load checkpoint from
+
+    Returns: tuple of the reloaded model, optimizer, epoch of the checkpoint, and a boolean
+        indicating whether or not the checkpoint was succesffully loaded.
+    Loads the state dict for the given model, optimizer
+    '''
     start_epoch = 0
     if os.path.isfile(fname):
         log.info("=> loading checkpoint '{}'".format(fname))
