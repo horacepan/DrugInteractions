@@ -1,5 +1,5 @@
 import os
-import psutil
+#import psutil
 import sys
 import json
 import logging
@@ -67,20 +67,20 @@ def setup_experiment_log(args, savedir='./results/', exp_name='test', save=False
     else:
         # make the save dir, retry
         os.makedirs(savedir)
-        return setup_experiment_log(savedir, exp_name, save)
+        return setup_experiment_log(args, savedir, exp_name, save)
 
     return logfile, swr
 
-def check_memory(verbose=True):
-    '''
-    verbose: bool, flag to pretty print consumed memory
-    Returns: memory usage in MB
-    '''
-    process = psutil.Process(os.getpid())
-    mem = process.memory_info()[0] / float(2 ** 20)
-    if verbose:
-        print("Consumed {:.2f}mb memory".format(mem))
-    return mem
+#def check_memory(verbose=True):
+#    '''
+#    verbose: bool, flag to pretty print consumed memory
+#    Returns: memory usage in MB
+#    '''
+#    process = psutil.Process(os.getpid())
+#    mem = process.memory_info()[0] / float(2 ** 20)
+#    if verbose:
+#        print("Consumed {:.2f}mb memory".format(mem))
+#    return mem
 
 def save_checkpoint(epoch, model, optimizer, fname):
     '''

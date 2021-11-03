@@ -19,7 +19,7 @@ def get_args():
     parser.add_argument('--savedir',     type=str,   default='./results/ddi/',       help='directory to save results')
     parser.add_argument('--exp_name',    type=str,   default='test',                 help='Name of experiment (used in creating save location as well')
     parser.add_argument('--test_epoch',  type=int,   default=10,                     help='How often to run model on test set')
-    parser.add_argument('--fn',          type=str,   default='./data/ddi_pairs.txt', help='location of DDI pairs text file')
+    parser.add_argument('--data_fn',          type=str,   default='./data/ddi_pairs.txt', help='location of DDI pairs text file')
     parser.add_argument('--num_workers', type=int,   default=1)
     parser.add_argument('--batch_size',  type=int,   default=256)
     parser.add_argument('--train_pct',   type=float, default=0.8)
@@ -67,7 +67,7 @@ def main(args):
     # Set up train, test data loaders
     loader_params = {'batch_size': args.batch_size, 'num_workers': args.num_workers,
                      'pin_memory': args.pin_memory, 'shuffle': True}
-    data = DDIData(args.fn)
+    data = DDIData(args.data_fn)
     train_len = int(len(data) * args.train_pct)
     test_len = len(data) - train_len
     train_data, test_data = torch.utils.data.random_split(data,
@@ -92,7 +92,8 @@ def main(args):
             val_acc = validate_model(test_loader, model, device)
             log.info('Epoch {:5d} | Last epoch train loss {:.3f} | Test acc: {:.3f}'.format(e, np.mean(losses), val_acc))
             model.train()
-            save_checkpoint(e, model, opt, checkpoint_fn)
+            if args.save:
+                save_checkpoint(e, model, opt, checkpoint_fn)
 
         losses = []
         for xs, y in train_loader:
