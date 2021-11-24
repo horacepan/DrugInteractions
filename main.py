@@ -19,7 +19,7 @@ def get_args():
     parser.add_argument('--savedir',     type=str,   default='./results/ddi/',       help='directory to save results')
     parser.add_argument('--exp_name',    type=str,   default='test',                 help='Name of experiment (used in creating save location as well')
     parser.add_argument('--test_epoch',  type=int,   default=10,                     help='How often to run model on test set')
-    parser.add_argument('--data_fn',          type=str,   default='./data/ddi_pairs.txt', help='location of DDI pairs text file')
+    parser.add_argument('--data_fn',     type=str,   default='./data/ddi_pairs.txt', help='location of DDI pairs text file')
     parser.add_argument('--num_workers', type=int,   default=1)
     parser.add_argument('--batch_size',  type=int,   default=256)
     parser.add_argument('--train_pct',   type=float, default=0.8)

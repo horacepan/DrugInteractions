@@ -48,9 +48,11 @@ def _get_atoms(atom_dict):
     atom_types = []
     coords = np.zeros((len(atom_dict), 3))
     idx = 0
+    graph_sizes = []
 
     for atom_str, xyz in atom_dict.items():
         if type(atom_str) != str or 'Atom' not in atom_str:
+            pdb.set_trace()
             continue
         coords[idx] = xyz
         idx += 1
@@ -66,7 +68,7 @@ def _get_atoms(atom_dict):
 
     return atom_types, coords
 
-def make_data(struc_str):
+def make_data(struc_str, onehot=False):
     '''
     struc_str: string that holds the atom, coordinate, and bond information
     Returns: torch_geometric.data.Data object
@@ -77,22 +79,30 @@ def make_data(struc_str):
     atoms, coords = _get_atoms(atom_dict)
     atoms = [ATOM_TYPES[a] for a in atoms]
 
-    atom_features = F.one_hot(torch.tensor(atoms), num_classes=len(ATOM_TYPES))
+    if onehot:
+        atom_features = F.one_hot(torch.tensor(atoms), num_classes=len(ATOM_TYPES))
+        edge_attr = F.one_hot(torch.tensor(bond_types), num_classes=3)
+    else:
+        atom_features = torch.tensor(atoms)
+        edge_attr = torch.tensor(bond_types)
     edge_index = torch.tensor([bond_st, bond_end], dtype=torch.long)
-    edge_attr = F.one_hot(torch.tensor(bond_types), num_classes=3)
     pos = torch.tensor(coords)
     data = Data(x=atom_features, edge_index=edge_index, edge_attr=edge_attr, pos=pos)
     return data
 
-def parse_structure(fn):
+def parse_structure(fn, nrows=None, onehot=False):
     '''
     fn: string of location of the 3d_structure.csv file
     Returns: list of torch_geometric.data.Data objects
     '''
-    df = pd.read_csv(fn)
+    df = pd.read_csv(fn, nrows=nrows)
+    drug_map = {}
     data_lst = []
+    max_atoms = max_edges = 0
 
-    for struc_str in tqdm(df['structure']):
+    for row_idx, row in tqdm(df.iterrows()):
+        drug = row['drugbank_id']
+        struc_str = row['structure']
         atom_dict = eval(struc_str)
         bond_lst = atom_dict.pop('bonds')
 
@@ -100,15 +110,21 @@ def parse_structure(fn):
         atoms, coords = _get_atoms(atom_dict)
         atoms = [ATOM_TYPES[a] for a in atoms]
 
-        atom_features = F.one_hot(torch.tensor(atoms), num_classes=len(ATOM_TYPES))
+        if onehot:
+            atom_features = F.one_hot(torch.tensor(atoms), num_classes=len(ATOM_TYPES))
+            edge_attr = F.one_hot(torch.tensor(bond_types), num_classes=3)
+        else:
+            atom_features = torch.tensor(atoms)
+            edge_attr = torch.tensor(bond_types)
+
         edge_index = torch.tensor([bond_st, bond_end], dtype=torch.long)
-        edge_attr = F.one_hot(torch.tensor(bond_types), num_classes=3)
         pos = torch.tensor(coords)
         data = Data(x=atom_features, edge_index=edge_index, edge_attr=edge_attr, pos=pos)
+        drug_map[drug] = data
         data_lst.append(data)
 
-    return data_lst
+    return data_lst, drug_map
 
 if __name__ == '__main__':
     fn = './data/3d_struc.csv' # change location to wherever the file lives
-    data_lst = parse_structure(fn)
+    data_lst, drug_map = parse_structure(fn)
