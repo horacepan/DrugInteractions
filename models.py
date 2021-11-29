@@ -4,11 +4,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, global_mean_pool
 
+def _reset_params(model):
+    for p in model.parameters():
+        if len(p.shape) > 1:
+            torch.nn.init.xavier_uniform_(p)
+        else:
+            torch.nn.init.zeros_(p)
+
 class BaselineModel(nn.Module):
     def __init__(self, vocab_size, embed_dim, hid_dim, out_dim):
         super(BaselineModel, self).__init__()
         self.hid_dim = hid_dim
-        self.out_dim = hid_dim
+        self.out_dim = out_dim
         self.enc = nn.Sequential(
             nn.Embedding(vocab_size, embed_dim),
             nn.ReLU(),
@@ -68,16 +75,20 @@ class BasicGCN(torch.nn.Module):
         return x
 
 class GCNPair(nn.Module):
-    def __init__(self, embed_dim, hid_dim, out_dim, nlayers=2, dropout=0.5):
+    def __init__(self, embed_dim, hid_dim, out_dim, nlayers=2, dropout=0.5, dec='mlp'):
         super(GCNPair, self).__init__()
         self.gcn = BasicGCN(embed_dim, hid_dim, hid_dim, nlayers, dropout)
-        self.dec = nn.Sequential(
-            nn.Linear(hid_dim, hid_dim),
-            nn.ReLU(),
-            nn.Linear(hid_dim, hid_dim),
-            nn.ReLU(),
-            nn.Linear(hid_dim, out_dim),
-        )
+        if dec == 'mlp':
+            self.dec = nn.Sequential(
+                nn.Linear(hid_dim, hid_dim),
+                nn.ReLU(),
+                nn.Linear(hid_dim, hid_dim),
+                nn.ReLU(),
+                nn.Linear(hid_dim, out_dim),
+            )
+        else:
+            self.dec = nn.Linear(hid_dim, out_dim)
+        _reset_params(self)
 
     def forward(self, batch):
         #x1, edge_index1, edge_attr1, pos1, ent1, batch1 = batch.x, batch.edge_index, batch.edge_attr, batch.pos, batch.ent, batch.batch
@@ -88,6 +99,7 @@ class GCNPair(nn.Module):
         g1 = self.gcn(x1, edge_index1, batch1)
         g2 = self.gcn(x2, edge_index2, batch2)
         gs = g1 + g2
+        gs = F.relu(gs)
         output = self.dec(gs)
         return output
 
@@ -111,6 +123,8 @@ class GCNEntPair(nn.Module):
             nn.ReLU(),
             nn.Linear(hid_dim, out_dim),
         )
+        _reset_params(self)
+
     def forward(self, batch):
         #x1, edge_index1, edge_attr1, pos1, ent1, batch1 = batch.x, batch.edge_index, batch.edge_attr, batch.pos, batch.ent, batch.batch
         #x2, edge_index2, edge_attr2, pos2, ent2, batch2 = batch.x2, batch.edge_index2, batch.edge_attr2, batch.pos2, batch.ent2, batch.x2_batch
@@ -125,8 +139,38 @@ class GCNEntPair(nn.Module):
         eg1 = torch.hstack([g1, e1])
         eg2 = torch.hstack([g2, e2])
         egs = eg1 + eg2
+        egs = F.relu(egs)
         output = self.dec(egs)
         return output
+
+class EntNet(nn.Module):
+    def __init__(self, vocab_size, embed_dim, hid_dim, out_dim):
+        super(EntNet, self).__init__()
+        self.hid_dim = hid_dim
+        self.out_dim = out_dim
+        self.enc = nn.Sequential(
+            nn.Embedding(vocab_size, embed_dim),
+            nn.ReLU(),
+            nn.Linear(embed_dim, hid_dim),
+            nn.ReLU(),
+            nn.Linear(hid_dim, hid_dim),
+            nn.ReLU(),
+        )
+        self.dec = nn.Sequential(
+            nn.Linear(hid_dim, hid_dim),
+            nn.ReLU(),
+            nn.Linear(hid_dim, hid_dim),
+            nn.ReLU(),
+            nn.Linear(hid_dim, out_dim),
+        )
+        _reset_params(self)
+
+    def forward(self, batch):
+        xs = torch.stack([batch.ent1, batch.ent2], dim=1)
+        xs = self.enc(xs)
+        xs = xs.sum(dim=1)
+        xs = F.relu(xs)
+        return self.dec(xs)
 
 if __name__ == '__main__':
     net = BaselineModel(100, 32, 32, 300)

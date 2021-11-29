@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-from torch_geometric.data import Data, DataLoader
+from torch_geometric.data import Data#, DataLoader
 from parse_structure import parse_structure
 
 def _get_entities_labels(df, nrows=None):
@@ -106,7 +106,7 @@ if __name__ == '__main__':
     struc_fn = './data/3d_struc.csv'
     dataset = DDIData(fn, nrows=100)
     d2 = DDIGraphDataset(fn, struc_fn)
-    dld = DataLoader(d2, follow_batch=d2.follow_batch, batch_size=32)
-    batch = next(iter(dld))
-    end = time.time()
-    print('Elapsed: {:.2f}s'.format(end - st))
+    #dld = DataLoader(d2, follow_batch=d2.follow_batch, batch_size=32)
+    #batch = next(iter(dld))
+    #end = time.time()
+    #print('Elapsed: {:.2f}s'.format(end - st))
