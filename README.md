@@ -26,7 +26,7 @@ python main.py --data_fn './data/ddi_pairs.txt' --hid_dim 256 --epochs 300 --sav
 
 To run the training script with graph structure, you might run something like this:
 ```
-python main_graph.py --cuda --batch_size 1024 --test_epoch 1 --hid_dim 512 --model GCNEntPair --save  --exp_name 'gcnentpair_512h'
+python main_graph.py --data_fn './data/ddi_pairs.txt' --struc_fn './data/3d_struc.csv' --batch_size 1024 --test_epoch 1 --hid_dim 512 --model GCNEntPair --save  --exp_name 'gcnentpair_512h' --cuda
 ```
 
 Modify the `savedir` and `exp_name` to wherever you'd like your results to be stored. If the directory specified by `savedir` does not currently exist, [`utils.setup_experiment_log`](https://github.com/horacepan/DrugInteractions/blob/d9d292737815f827d1d1a7b2136363f80da4866e/utils.py#L38) will create it.
