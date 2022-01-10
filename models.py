@@ -119,11 +119,11 @@ class GCNPair(nn.Module):
         _reset_params(self)
 
     def forward(self, batch):
-        x1, edge_index1, batch1 = batch.x1, batch.edge_index1, batch.x1_batch
-        x2, edge_index2, batch2 = batch.x2, batch.edge_index2, batch.x2_batch
+        x1, edge_index1, batch1, edge_weight1 = batch.x1, batch.edge_index1, batch.x1_batch, batch.edge_attr1
+        x2, edge_index2, batch2, edge_weight2 = batch.x2, batch.edge_index2, batch.x2_batch, batch.edge_attr2
 
-        g1 = self.gcn(x1, edge_index1, batch1)
-        g2 = self.gcn(x2, edge_index2, batch2)
+        g1 = self.gcn(x1, edge_index1, batch1, edge_weight1)
+        g2 = self.gcn(x2, edge_index2, batch2, edge_weight2)
         gs = g1 + g2
         gs = F.relu(gs)
         output = self.dec(gs)

@@ -28,7 +28,7 @@ def _get_edges(bonds):
         # sub 1 to get 0-indexed values
         a1 = bond.fro - 1
         a2 = bond.to - 1
-        bond_type = bond.type - 1
+        bond_type = bond.type
 
         # add in both directions to make undirected
         edges_from.append(a1)
