@@ -21,7 +21,7 @@ def _get_entities_labels(df, nrows=None):
     d2 = df['Drug2'].apply(lambda x: dmap[x]).to_numpy()
     labels = df['ID'].apply(lambda x: lmap[x]).to_numpy()
     drugs = np.column_stack((d1, d2))
-    return drugs, labels
+    return drugs, labels, dmap, lmap
 
 def _filtered_df(df, all_drugs):
     df1in = df['Drug1'].isin(all_drugs)
@@ -58,9 +58,11 @@ class DDIData(Dataset):
         self._col_names = ['Drug1', 'Drug2', 'ID']
         self._df = pd.read_csv(fn, sep='\t', nrows=nrows)
 
-        drugs, labels = _get_entities_labels(self._df)
+        drugs, labels, dmap, lmap = _get_entities_labels(self._df)
         self.drugs = torch.from_numpy(drugs)
         self.labels = torch.from_numpy(labels)
+        self.id_to_drug = {i: drug_id for drug_id, i in dmap.items()}
+        self.id_to_label = {i: label for label, i in dmap.items()}
 
     def __len__(self):
         return len(self.drugs)
@@ -76,9 +78,12 @@ class DDIGraphDataset(Dataset):
         self._df = _filtered_df(pd.read_csv(fn, sep='\t', nrows=nrows), self._drug_structs)
         print('post filter length df:', len(self._df))
 
-        drug_ents, labels = _get_entities_labels(self._df)
-        self.drug_ents = drug_ents
+        drugs, labels, dmap, lmap = _get_entities_labels(self._df)
+        self.drugs = drugs
         self.labels = labels
+        self.id_to_drug = {i: drug_id for drug_id, i in dmap.items()}
+        self.id_to_label = {i: label for label, i in dmap.items()}
+
 
     @property
     def follow_batch(self):
@@ -91,7 +96,7 @@ class DDIGraphDataset(Dataset):
         drug_row = self._df.iloc[idx]
         label = self.labels[idx]
 
-        ent1, ent2 = self.drug_ents[idx]
+        ent1, ent2 = self.drugs[idx]
         drug1 = drug_row['Drug1']
         data1 = self._drug_structs[drug1]
         drug2 = drug_row['Drug2']

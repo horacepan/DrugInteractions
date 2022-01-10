@@ -2,7 +2,7 @@ import pdb
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, global_mean_pool
+from torch_geometric.nn import GCNConv, global_mean_pool, GraphConv
 
 def _reset_params(model):
     for p in model.parameters():
@@ -61,7 +61,7 @@ class BasicGCN(torch.nn.Module):
     def reset_parameters(self):
         pass
 
-    def forward(self, x, edge_index, batch):
+    def forward(self, x, edge_index, batch, edge_weight=None):
         x = self.atom_encoder(x)
 
         for gconv in self.gcn_layers:
@@ -74,10 +74,38 @@ class BasicGCN(torch.nn.Module):
         x = self.fc(x)
         return x
 
+class BasicGCN2(torch.nn.Module):
+    def __init__(self, embed_dim, hid_dim, out_dim, nlayers, dropout=0.5):
+        super(BasicGCN2, self).__init__()
+        self.atom_encoder = nn.Embedding(11, embed_dim) # 11 different atom types here
+        self.gcn_layers = nn.ModuleList(
+            [GraphConv(embed_dim, hid_dim)] + \
+            [GraphConv(hid_dim, hid_dim) for _ in range(nlayers - 1)]
+        )
+        self.fc = nn.Linear(hid_dim, out_dim)
+        self.dropout = dropout
+        self.nlayers = nlayers
+
+    def forward(self, x, edge_index, batch, edge_weight=None):
+        x = self.atom_encoder(x)
+
+        for gconv in self.gcn_layers:
+            x = gconv(x, edge_index, edge_weight)
+            x = F.relu(x)
+            x = F.dropout(x, self.dropout, training=self.training)
+
+        x = global_mean_pool(x, batch)
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = self.fc(x)
+        return x
+
 class GCNPair(nn.Module):
-    def __init__(self, embed_dim, hid_dim, out_dim, nlayers=2, dropout=0.5, dec='mlp'):
+    def __init__(self, embed_dim, hid_dim, out_dim, nlayers=2, dropout=0.5, dec='mlp', base_gcn='BasicGCN'):
         super(GCNPair, self).__init__()
-        self.gcn = BasicGCN(embed_dim, hid_dim, hid_dim, nlayers, dropout)
+        if base_gcn == 'BasicGCN':
+            self.gcn = BasicGCN(embed_dim, hid_dim, hid_dim, nlayers, dropout)
+        else:
+            self.gcn = BasicGCN2(embed_dim, hid_dim, hid_dim, nlayers, dropout)
         if dec == 'mlp':
             self.dec = nn.Sequential(
                 nn.Linear(hid_dim, hid_dim),
@@ -91,13 +119,19 @@ class GCNPair(nn.Module):
         _reset_params(self)
 
     def forward(self, batch):
-        #x1, edge_index1, edge_attr1, pos1, ent1, batch1 = batch.x, batch.edge_index, batch.edge_attr, batch.pos, batch.ent, batch.batch
-        #x2, edge_index2, edge_attr2, pos2, ent2, batch2 = batch.x2, batch.edge_index2, batch.edge_attr2, batch.pos2, batch.ent2, batch.x2_batch
         x1, edge_index1, batch1 = batch.x1, batch.edge_index1, batch.x1_batch
         x2, edge_index2, batch2 = batch.x2, batch.edge_index2, batch.x2_batch
 
         g1 = self.gcn(x1, edge_index1, batch1)
         g2 = self.gcn(x2, edge_index2, batch2)
+        gs = g1 + g2
+        gs = F.relu(gs)
+        output = self.dec(gs)
+        return output
+
+    def forward_all(self, x1, e1, b1, x2, e2, b2, ew1=None, ew2=None):
+        g1 = self.gcn(x1, e1, b1, ew1)
+        g2 = self.gcn(x2, e2, b2, ew2)
         gs = g1 + g2
         gs = F.relu(gs)
         output = self.dec(gs)

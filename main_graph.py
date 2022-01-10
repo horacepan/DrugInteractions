@@ -62,6 +62,7 @@ def get_args():
     parser.add_argument('--hid_dim',     type=int,   default=32)
     parser.add_argument('--out_dim',     type=int,   default=32)
     parser.add_argument('--nrows',       type=int,   default=None)
+    parser.add_argument('--base_gcn',    type=str,   default='BasicGCN')
     parser.add_argument('--cuda',       action='store_true', default=False, help='Flag to specify cuda')
     parser.add_argument('--debug',      action='store_true', default=False)
     parser.add_argument('--save',       action='store_true', default=False, help='Flag to specify to save log, summary writer')
@@ -71,7 +72,8 @@ def get_args():
 
 def _get_model(args):
     if args.model_str == 'GCNPair':
-        model = GCNPair(args.embed_dim, args.hid_dim, NUM_LABELS, nlayers=args.nlayers, dec=args.dec, dropout=args.dropout)
+        model = GCNPair(args.embed_dim, args.hid_dim, NUM_LABELS, nlayers=args.nlayers, dec=args.dec,
+                        dropout=args.dropout, base_gcn=args.base_gcn)
     elif args.model_str == 'GCNEntPair':
         model = GCNEntPair(VOCAB_SIZE, args.embed_dim, args.hid_dim // 2, args.hid_dim // 2, NUM_LABELS)
     elif args.model_str == 'EntNet':
@@ -83,7 +85,7 @@ def main(args):
     log = get_logger(log_fn)
     torch.random.manual_seed(args.seed)
     np.random.seed(args.seed)
-    device = device = torch.device("cuda:0" if args.cuda and torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if args.cuda and torch.cuda.is_available() else "cpu")
     log.info(f'Starting experiment on device {device}. Saving log in: {log_fn}')
 
     dataset = DDIGraphDataset(args.data_fn, args.struc_fn, nrows=args.nrows)
