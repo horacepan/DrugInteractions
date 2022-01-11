@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, global_mean_pool, GraphConv
+from egnn_clean import EGNN
 
 def _reset_params(model):
     for p in model.parameters():
@@ -56,12 +57,8 @@ class BasicGCN(torch.nn.Module):
         self.fc = nn.Linear(hid_dim, out_dim)
         self.dropout = dropout
         self.nlayers = nlayers
-        self.reset_parameters()
 
-    def reset_parameters(self):
-        pass
-
-    def forward(self, x, edge_index, batch, edge_weight=None):
+    def forward(self, x, edge_index, batch, edge_weight=None, **kwargs):
         x = self.atom_encoder(x)
 
         for gconv in self.gcn_layers:
@@ -86,7 +83,7 @@ class BasicGCN2(torch.nn.Module):
         self.dropout = dropout
         self.nlayers = nlayers
 
-    def forward(self, x, edge_index, batch, edge_weight=None):
+    def forward(self, x, edge_index, batch, edge_weight=None, **kwargs):
         x = self.atom_encoder(x)
 
         for gconv in self.gcn_layers:
@@ -100,12 +97,14 @@ class BasicGCN2(torch.nn.Module):
         return x
 
 class GCNPair(nn.Module):
-    def __init__(self, embed_dim, hid_dim, out_dim, nlayers=2, dropout=0.5, dec='mlp', base_gcn='BasicGCN'):
+    def __init__(self, embed_dim, hid_dim, out_dim, nlayers=2, dropout=0.5, dec='mlp', base_gcn='BasicGCN', nopos=False):
         super(GCNPair, self).__init__()
         if base_gcn == 'BasicGCN':
             self.gcn = BasicGCN(embed_dim, hid_dim, hid_dim, nlayers, dropout)
-        else:
+        elif base_gcn == 'GraphConv':
             self.gcn = BasicGCN2(embed_dim, hid_dim, hid_dim, nlayers, dropout)
+        elif base_gcn == 'EGNN':
+            self.gcn = EGNN(embed_dim, hid_dim, hid_dim, n_layers=nlayers, nopos=nopos)
         if dec == 'mlp':
             self.dec = nn.Sequential(
                 nn.Linear(hid_dim, hid_dim),
@@ -119,11 +118,12 @@ class GCNPair(nn.Module):
         _reset_params(self)
 
     def forward(self, batch):
-        x1, edge_index1, batch1, edge_weight1 = batch.x1, batch.edge_index1, batch.x1_batch, batch.edge_attr1
-        x2, edge_index2, batch2, edge_weight2 = batch.x2, batch.edge_index2, batch.x2_batch, batch.edge_attr2
+        x1, edge_index1, batch1, pos1 = batch.x1, batch.edge_index1, batch.x1_batch, batch.pos1
+        x2, edge_index2, batch2, pos2 = batch.x2, batch.edge_index2, batch.x2_batch, batch.pos2
 
-        g1 = self.gcn(x1, edge_index1, batch1, edge_weight1)
-        g2 = self.gcn(x2, edge_index2, batch2, edge_weight2)
+        # gcn needs atom features, edge index, batch (for pooling), and potentially edge attrs, coordinates,
+        g1 = self.gcn(x=x1, edge_index=edge_index1, batch=batch1, coord=pos1)
+        g2 = self.gcn(x=x2, edge_index=edge_index2, batch=batch2, coord=pos2)
         gs = g1 + g2
         gs = F.relu(gs)
         output = self.dec(gs)

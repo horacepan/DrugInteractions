@@ -23,6 +23,12 @@ def ncorrect(output, tgt):
     correct = (predicted == tgt).sum().item()
     return correct
 
+def num_params(model):
+    nparams = 0
+    for p in model.parameters():
+        nparams += p.numel()
+    return nparams
+
 def _validate_model(dataloader, model, device):
     '''
     Returns: float, accuracy of model on the data in the given dataloader
@@ -63,6 +69,7 @@ def get_args():
     parser.add_argument('--out_dim',     type=int,   default=32)
     parser.add_argument('--nrows',       type=int,   default=None)
     parser.add_argument('--base_gcn',    type=str,   default='BasicGCN')
+    parser.add_argument('--nopos',      action='store_true', default=False, help='Flag to specify whether to use pos')
     parser.add_argument('--cuda',       action='store_true', default=False, help='Flag to specify cuda')
     parser.add_argument('--debug',      action='store_true', default=False)
     parser.add_argument('--save',       action='store_true', default=False, help='Flag to specify to save log, summary writer')
@@ -73,7 +80,7 @@ def get_args():
 def _get_model(args):
     if args.model_str == 'GCNPair':
         model = GCNPair(args.embed_dim, args.hid_dim, NUM_LABELS, nlayers=args.nlayers, dec=args.dec,
-                        dropout=args.dropout, base_gcn=args.base_gcn)
+                        dropout=args.dropout, base_gcn=args.base_gcn, nopos=args.nopos)
     elif args.model_str == 'GCNEntPair':
         model = GCNEntPair(VOCAB_SIZE, args.embed_dim, args.hid_dim // 2, args.hid_dim // 2, NUM_LABELS)
     elif args.model_str == 'EntNet':
@@ -110,7 +117,7 @@ def main(args):
     model = model.to(device)
     opt = optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.CrossEntropyLoss()
-    log.info(f'Running Model: {args.model_str}')
+    log.info(f'Running Model: {args.model_str} | num params: {num_params(model)}')
 
     savedir = os.path.join(args.savedir, args.exp_name)
     checkpoint_fn = os.path.join(savedir, 'checkpoint.pth')
