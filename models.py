@@ -230,14 +230,12 @@ class MorganFPNet(nn.Module):
             nn.Linear(hid_dim, out_dim)
         )
 
-    def forward(self, batch):
-        #x1, x2, _ = batch.drug1, batch.drug2, batch.target
-        x1, x2 = batch
-        x1 = self.enc(x1)
-        x2 = self.enc(x2)
-        x = x1 + x2
-        x = self.dec(x)
-        return x
+    def forward(self, drug1, drug2):
+        d1 = self.enc(drug1)
+        d2 = self.enc(drug2)
+        d = d1 + d2
+        d = self.dec(d)
+        return d
 
 if __name__ == '__main__':
     net = BaselineModel(100, 32, 32, 300)
