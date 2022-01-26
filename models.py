@@ -138,9 +138,14 @@ class GCNPair(nn.Module):
         return output
 
 class GCNEntPair(nn.Module):
-    def __init__(self, vocab_size, embed_dim, ghid_dim, ehid_dim, out_dim, nlayers=2, dropout=0.5):
+    def __init__(self, vocab_size, embed_dim, ghid_dim, ehid_dim, out_dim, nlayers=2, dropout=0.5, base_gcn='', nopos=True):
         super(GCNEntPair, self).__init__()
-        self.gcn = BasicGCN(embed_dim, ghid_dim, ghid_dim, nlayers, dropout)
+        if base_gcn == 'GCN':
+            self.gcn = BasicGCN(embed_dim, ghid_dim, ghid_dim, nlayers, dropout)
+        elif base_gcn == 'GraphConv':
+            self.gcn = BasicGCN2(embed_dim, ghid_dim, ghid_dim, nlayers, dropout)
+        elif base_gcn == 'EGNN':
+            self.gcn = EGNN(embed_dim, ghid_dim, ghid_dim, n_layers=nlayers, nopos=nopos)
         self.enc = nn.Sequential(
             nn.Embedding(vocab_size, embed_dim),
             nn.ReLU(),
@@ -162,11 +167,11 @@ class GCNEntPair(nn.Module):
     def forward(self, batch):
         #x1, edge_index1, edge_attr1, pos1, ent1, batch1 = batch.x, batch.edge_index, batch.edge_attr, batch.pos, batch.ent, batch.batch
         #x2, edge_index2, edge_attr2, pos2, ent2, batch2 = batch.x2, batch.edge_index2, batch.edge_attr2, batch.pos2, batch.ent2, batch.x2_batch
-        x1, edge_index1, ent1, batch1 = batch.x1, batch.edge_index1, batch.ent1, batch.x1_batch
-        x2, edge_index2, ent2, batch2 = batch.x2, batch.edge_index2, batch.ent2, batch.x2_batch
+        x1, edge_index1, ent1, batch1, pos1 = batch.x1, batch.edge_index1, batch.ent1, batch.x1_batch, batch.pos1
+        x2, edge_index2, ent2, batch2, pos2 = batch.x2, batch.edge_index2, batch.ent2, batch.x2_batch, batch.pos2
 
-        g1 = self.gcn(x1, edge_index1, batch1)
-        g2 = self.gcn(x2, edge_index2, batch2)
+        g1 = self.gcn(x=x1, edge_index=edge_index1, batch=batch1, coord=pos1)
+        g2 = self.gcn(x=x2, edge_index=edge_index2, batch=batch2, coord=pos2)
         e1 = self.enc(ent1)
         e2 = self.enc(ent2)
 
@@ -205,6 +210,34 @@ class EntNet(nn.Module):
         xs = xs.sum(dim=1)
         xs = F.relu(xs)
         return self.dec(xs)
+
+class MorganFPNet(nn.Module):
+    def __init__(self, in_dim, hid_dim, out_dim):
+        super(MorganFPNet, self).__init__()
+        self.enc = nn.Sequential(
+            nn.Linear(in_dim, hid_dim),
+            nn.ReLU(),
+            nn.Linear(hid_dim, hid_dim),
+            nn.ReLU(),
+            nn.Linear(hid_dim, hid_dim)
+        )
+
+        self.dec = nn.Sequential(
+            nn.Linear(hid_dim, hid_dim),
+            nn.ReLU(),
+            nn.Linear(hid_dim, hid_dim),
+            nn.ReLU(),
+            nn.Linear(hid_dim, out_dim)
+        )
+
+    def forward(self, batch):
+        #x1, x2, _ = batch.drug1, batch.drug2, batch.target
+        x1, x2 = batch
+        x1 = self.enc(x1)
+        x2 = self.enc(x2)
+        x = x1 + x2
+        x = self.dec(x)
+        return x
 
 if __name__ == '__main__':
     net = BaselineModel(100, 32, 32, 300)

@@ -1,12 +1,23 @@
 import time
-st = time.time()
+import pickle
 import pdb
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import DataLoader as tDataLoader
 from torch.utils.data import Dataset
-from torch_geometric.data import Data#, DataLoader
+from torch_geometric.data import Data, DataLoader
 from parse_structure import parse_structure
+from models import MorganFPNet
+
+from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
+from utils import check_memory
+
+def _get_morgan_fp(smile_str, fp_param_dict):
+    mol = Chem.MolFromSmiles(smile_str)
+    fp = np.array(rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, **fp_param_dict))
+    return fp
 
 def _get_entities_labels(df, nrows=None):
     unique_drugs = set(df['Drug1'].unique())
@@ -30,7 +41,7 @@ def _filtered_df(df, all_drugs):
 
 class PairData(Data):
     def __init__(self, x1=None, edge_index1=None, edge_attr1=None, pos1=None, ent1=None,
-                       x2=None, edge_index2=None, edge_attr2=None, pos2=None, ent2=None, target=None):
+                       x2=None, edge_index2=None, edge_attr2=None, pos2=None, ent2=None, target=None, d1=None, d2=None):
         super().__init__()
         self.edge_index1 = edge_index1
         self.edge_index2 = edge_index2
@@ -43,6 +54,8 @@ class PairData(Data):
         self.pos1 = pos1
         self.pos2 = pos2
         self.target = target
+        self.d1 = d1
+        self.d2 = d2
 
     def __inc__(self, key, value, *args, **kwargs):
         if key == 'edge_index1':
@@ -51,7 +64,6 @@ class PairData(Data):
             return self.x2.size(0)
         else:
             return super().__inc__(key, value, *args, **kwargs)
-
 
 class DDIData(Dataset):
     def __init__(self, fn, nrows=None):
@@ -63,6 +75,7 @@ class DDIData(Dataset):
         self.labels = torch.from_numpy(labels)
         self.id_to_drug = {i: drug_id for drug_id, i in dmap.items()}
         self.id_to_label = {i: label for label, i in dmap.items()}
+        self.smiles = pickle.load(open('./data/db_to_smiles.pkl', 'rb'))
 
     def __len__(self):
         return len(self.drugs)
@@ -84,7 +97,6 @@ class DDIGraphDataset(Dataset):
         self.id_to_drug = {i: drug_id for drug_id, i in dmap.items()}
         self.id_to_label = {i: label for label, i in dmap.items()}
 
-
     @property
     def follow_batch(self):
         return ['x1', 'x2']
@@ -101,16 +113,60 @@ class DDIGraphDataset(Dataset):
         data1 = self._drug_structs[drug1]
         drug2 = drug_row['Drug2']
         data2 = self._drug_structs[drug2]
-        pair_data = PairData(x1=data1.x, edge_index1=data1.edge_index, edge_attr1=data1.edge_attr, pos1=data1.pos, ent1=torch.tensor([ent1]),
+        pair_data = PairData(x1=data1.x, edge_index1=data1.edge_index, edge_attr1=data1.edge_attr, pos1=data1.pos, ent1=torch.tensor([ent1],),
                              x2=data2.x, edge_index2=data2.edge_index, edge_attr2=data2.edge_attr, pos2=data2.pos, ent2=torch.tensor([ent2]),
-                             target=torch.tensor([label]))
+                             target=torch.tensor([label]), d1=drug1, d2=drug2)
         return pair_data
+
+class FingerPrintDataset(Dataset):
+    def __init__(self, fn, pkl, fp_param_dict, nrows=None):
+        self._db_to_smiles = pickle.load(open(pkl, 'rb'))
+        self._fps = self._smiles(self._db_to_smiles, fp_param_dict) #{db: torch.FloatTensor(_get_morgan_fp(s, fp_param_dict)) for db, s in self._db_to_smiles.items()}
+        self._df = _filtered_df(pd.read_csv(fn, sep='\t', nrows=nrows), set(self._fps))
+        self.fp_params = fp_param_dict
+        drugs, labels, dmap, lmap = _get_entities_labels(self._df)
+        self.labels = labels
+        self.drugs = drugs
+        print('FP dataset len:', len(self._df))
+
+    def _smiles(self, db_smiles, fp_params):
+        d = {}
+        for db, s in db_smiles.items():
+            try:
+                d[db] = _get_morgan_fp(s, fp_params)
+            except:
+                continue
+        return d
+
+    def __len__(self):
+        return len(self._df)
+
+    def __getitem__(self, idx):
+        drug_row = self._df.iloc[idx]
+        d1, d2, _ = drug_row
+        fp1 = torch.FloatTensor(self._fps[d1])
+        fp2 = torch.FloatTensor(self._fps[d2])
+        return fp1, fp2, self.labels[idx]
 
 if __name__ == '__main__':
     fn = './data/ddi_pairs.txt'
     struc_fn = './data/3d_struc.csv'
-    dataset = DDIData(fn, nrows=100)
-    d2 = DDIGraphDataset(fn, struc_fn)
+    pkl = './data/db_smiles.pkl'
+    params = {'radius': 2}
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    dataset = FingerPrintDataset(fn, pkl, params)
+    print(len(dataset))
+    dfd = tDataLoader(dataset, batch_size=32)
+    check_memory()
+
+    net = MorganFPNet(2048, 256, 299).to(device)
+    check_memory()
+    for batch in dfd:
+        a, b, c = batch
+        a = a.to(device)
+        b = b.to(device)
+        check_memory()
+        pdb.set_trace()
     #dld = DataLoader(d2, follow_batch=d2.follow_batch, batch_size=32)
     #batch = next(iter(dld))
     #end = time.time()

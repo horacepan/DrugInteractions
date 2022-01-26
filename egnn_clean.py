@@ -110,7 +110,7 @@ class E_GCL(nn.Module):
 
 
 class EGNN(nn.Module):
-    def __init__(self, embed_dim, hidden_nf, out_node_nf, in_edge_nf=0, act_fn=nn.SiLU(), n_layers=2, residual=True, attention=False, normalize=False, tanh=False, nopos=False):
+    def __init__(self, embed_dim, hidden_nf, out_node_nf, in_edge_nf=0, act_fn=nn.SiLU(), n_layers=2, residual=True, attention=False, normalize=False, tanh=False, nopos=''):
         '''
 
         :param in_node_nf: Number of features for 'h' at the input
@@ -145,8 +145,10 @@ class EGNN(nn.Module):
                                                 normalize=normalize, tanh=tanh))
 
     def forward(self, x, edge_index, batch, coord, edge_attr=None):
-        if self.nopos:
+        if self.nopos == 'zeros':
             coord = torch.zeros(coord.shape).float().to(coord.device)
+        elif self.nopos == 'random':
+            coord = torch.normal(0, 1, size=coord.shape).float().to(coord.device)
         x = self.atom_encoder(x)
         x = F.relu(x)
         x = self.embedding_in(x)
