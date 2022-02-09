@@ -11,7 +11,9 @@ from parse_structure import parse_structure
 from models import MorganFPNet
 
 from rdkit import Chem
+from rdkit.Chem import RDKFingerprint
 from rdkit.Chem import rdMolDescriptors
+
 from utils import check_memory
 
 def _get_morgan_fp(smile_str, fp_param_dict):
@@ -89,7 +91,6 @@ class DDIGraphDataset(Dataset):
     def __init__(self, fn, struc_fn, nrows=None):
         self._drug_structs = parse_structure(struc_fn, nrows, onehot=False)[1] # dont need drug list
         self._df = _filtered_df(pd.read_csv(fn, sep='\t', nrows=nrows), self._drug_structs)
-        print('post filter length df:', len(self._df))
 
         drugs, labels, dmap, lmap = _get_entities_labels(self._df)
         self.drugs = drugs
@@ -127,7 +128,6 @@ class FingerPrintDataset(Dataset):
         drugs, labels, dmap, lmap = _get_entities_labels(self._df)
         self.labels = labels
         self.drugs = drugs
-        print('FP dataset len:', len(self._df))
 
     def _smiles(self, db_smiles, fp_params):
         d = {}
@@ -148,16 +148,63 @@ class FingerPrintDataset(Dataset):
         fp2 = torch.FloatTensor(self._fps[d2])
         return fp1, fp2, self.labels[idx]
 
+class SmilesFPDataset(Dataset):
+    def __init__(self, fn, nrows=None, radius=2, no_neg=False):
+        self.radius = radius
+        self._df = pd.read_csv(fn, sep='\t')
+        self._fp_cache = self._cache_smiles_fps(self._df)
+        self._df = self._filter_df(self._df, set(self._fp_cache.keys()))
+        self._label_map = {}
+
+        if no_neg:
+            self._df = self._df[self._df['ID'] != -1]
+
+        labels = self._df['ID'].unique()
+        for idx, l in np.ndenumerate(labels):
+            self._label_map[l] = idx[0]
+
+    def _cache_smiles_fps(self, df):
+        s1 = df[df.columns[0]].unique()
+        s2 = df[df.columns[1]].unique()
+        unique_smiles = list(set(np.concatenate([s1, s2])))
+        cache = {}
+
+        for s in unique_smiles:
+            mol = Chem.MolFromSmiles(s)
+            if mol is not None:
+                fp = np.array(rdMolDescriptors.GetMorganFingerprintAsBitVect(mol, radius=self.radius))
+                cache[s] = fp
+
+        return cache
+
+    def _filter_df(self, df, val_set):
+        df1in = df[df.columns[0]].isin(val_set)
+        df2in = df[df.columns[1]].isin(val_set)
+        return df[df1in & df2in]
+
+    def __len__(self):
+        return len(self._df)
+
+    def __getitem__(self, idx):
+        d1, d2, l = self._df.iloc[idx]
+        label = self._label_map[l]
+        fp1 = self._fp_cache[d1]
+        fp2 = self._fp_cache[d2]
+        return fp1, fp2, label
+
 if __name__ == '__main__':
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     fn = './data/ddi_pairs.txt'
     struc_fn = './data/3d_struc.csv'
     pkl = './data/db_smiles.pkl'
     params = {'radius': 2}
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    dataset = FingerPrintDataset(fn, pkl, params)
-    print(len(dataset))
+    #dataset = FingerPrintDataset(fn, pkl, params)
+
+    fn = './data/ddi_pos_neg_uniq_smiles.tsv'
+    dataset = SmilesFPDataset(fn)
     dfd = tDataLoader(dataset, batch_size=32)
     check_memory()
+    print(len(dataset))
 
     net = MorganFPNet(2048, 256, 299).to(device)
     check_memory()
